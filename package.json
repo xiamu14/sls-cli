@@ -1,0 +1,30 @@
+{
+  "name": "hugo-aiv-logs",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "api-cookie:status": "bun run src/index.ts api-cookie:status",
+    "api-cookie:import": "bun run src/index.ts api-cookie:import",
+    "sts:identity": "bun run src/index.ts sts:identity",
+    "sts:assume-role": "bun run src/index.ts sts:assume-role",
+    "sts:status": "bun run src/index.ts sts:status",
+    "cookie:status": "bun run src/index.ts cookie:status",
+    "cookie:import": "bun run src/index.ts cookie:import",
+    "pull": "bun run src/index.ts pull",
+    "classify:skeleton": "bun run src/index.ts classify:skeleton",
+    "analyze": "bun run src/index.ts analyze",
+    "run": "bun run src/index.ts run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alicloud/log": "^1.2.6",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
