@@ -4,10 +4,10 @@ import { resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
 
 import { loadConsoleAuthCache } from "./cookie-cache";
-import { loadStsCredentialCache } from "./sts-cache";
-import type { EnvironmentName, SlsConsoleEnvConfig, SlsEnvConfig } from "./types";
+import type { EnvironmentName, SlsConsoleEnvConfig } from "./types";
 
 loadDotenv({ path: resolve(process.cwd(), ".env"), quiet: true });
+loadDotenv({ path: resolve(process.cwd(), ".env.local"), override: true, quiet: true });
 
 const DEFAULT_ENVS = ["alpha", "production"];
 
@@ -16,31 +16,22 @@ const DEFAULT_CONSOLE_ENV: Record<
   Partial<
     Pick<
       SlsConsoleEnvConfig,
-      "consoleBaseUrl" | "projectName" | "logstoreName" | "referer"
+      "consoleBaseUrl" | "referer"
     >
   >
 > = {
   production: {
     consoleBaseUrl: "https://sls.console.aliyun.com",
-    projectName: "k8s-log-c7c49b76851914521a874b49399a75ca1",
-    logstoreName: "hugo-api",
-    referer:
-      "https://sls.console.aliyun.com/lognext/project/k8s-log-c7c49b76851914521a874b49399a75ca1/logsearch/hugo-api?slsRegion=cn-shenzhen",
   },
 };
 
-const DEFAULT_SLS_ENV: Record<
-  string,
-  Partial<Pick<SlsEnvConfig, "endpoint" | "projectName" | "logstoreName">>
-> = {
-  production: {
-    endpoint: "cn-shenzhen.log.aliyuncs.com",
-    projectName: "k8s-log-c7c49b76851914521a874b49399a75ca1",
-    logstoreName: "hugo-api",
-  },
+const get = (key: string) => {
+  const value = process.env[key]?.trim();
+  if (value?.includes("<project>") || value?.includes("<logstore>") || value?.includes("<region>")) {
+    return undefined;
+  }
+  return value ? value : undefined;
 };
-
-const get = (key: string) => process.env[key]?.trim();
 
 const upperEnv = (env: string) => env.toUpperCase().replace(/[^A-Z0-9]/g, "_");
 
@@ -53,25 +44,16 @@ const getConsoleEnvValue = (env: string, key: string) =>
   get(`ALIYUN_SLS_CONSOLE_${key}`) ??
   get(`ALIYUN_SLS_${key}`);
 
-const getEnvValueAny = (env: string, keys: string[]) => {
-  for (const key of keys) {
-    const value = getEnvValue(env, key);
-    if (value) return value;
-  }
-  return undefined;
-};
-
-const required = (env: string, key: string, aliases: string[] = []) => {
-  const keys = [key, ...aliases];
-  const value = getEnvValueAny(env, keys);
-  if (!value) {
-    throw new Error(
-      `Missing SLS config: ${keys
-        .map((item) => `SLS_${upperEnv(env)}_${item}`)
-        .join(" / ")} or ${keys.map((item) => `ALIYUN_SLS_${item}`).join(" / ")}`,
-    );
-  }
-  return value;
+export const getConsoleAccountMode = (): "single" | "environment" => {
+  const value = (
+    get("SLS_ACCOUNT_MODE") ??
+    get("ACCOUNT_MODE") ??
+    get("account_mode") ??
+    "single"
+  ).toLowerCase();
+  if (value === "single" || value === "signle") return "single";
+  if (value === "environment") return "environment";
+  throw new Error(`Invalid SLS_ACCOUNT_MODE: ${value}. Use single or environment.`);
 };
 
 const requiredConsole = (env: string, key: string, aliases: string[] = []) => {
@@ -95,60 +77,89 @@ export const parseEnvList = (value?: string): EnvironmentName[] => {
     .filter(Boolean);
 };
 
-export const loadSlsConfig = (env: EnvironmentName): SlsEnvConfig => {
-  const sts = loadStsCredentialCache(env);
-  const defaults = DEFAULT_SLS_ENV[env] ?? {};
+const extractRegionFromReferer = (referer?: string) =>
+  referer?.match(/[?&]slsRegion=([^&]+)/)?.[1];
+
+const extractRegionFromEndpoint = (endpoint?: string) =>
+  endpoint?.replace(/^https?:\/\//, "").match(/^([a-z]+-[a-z]+-\d+)\.log\.aliyuncs\.com$/)?.[1];
+
+const getConsoleRegion = (env: EnvironmentName, cachedReferer?: string) =>
+  getConsoleEnvValue(env, "REGION") ??
+  getEnvValue(env, "REGION") ??
+  extractRegionFromReferer(getConsoleEnvValue(env, "REFERER")) ??
+  extractRegionFromReferer(cachedReferer) ??
+  extractRegionFromEndpoint(getEnvValue(env, "ENDPOINT")) ??
+  "cn-shenzhen";
+
+const buildConsoleReferer = ({
+  consoleBaseUrl,
+  projectName,
+  logstoreName,
+  region,
+}: {
+  consoleBaseUrl: string;
+  projectName: string;
+  logstoreName: string;
+  region: string;
+}) =>
+  `${consoleBaseUrl.replace(/\/$/, "")}/lognext/project/${projectName}/logsearch/${logstoreName}?slsRegion=${region}`;
+
+const loadConsoleAuthForEnv = (env: EnvironmentName) => {
+  const accountMode = getConsoleAccountMode();
+  if (accountMode === "environment") {
+    return {
+      accountMode,
+      authEnv: env,
+      cached: loadConsoleAuthCache(env),
+    };
+  }
+
+  const candidates = ["single", env, "production", "alpha"];
+  for (const candidate of candidates) {
+    const cached = loadConsoleAuthCache(candidate);
+    if (cached) {
+      return {
+        accountMode,
+        authEnv: candidate,
+        cached,
+      };
+    }
+  }
   return {
-    env,
-    endpoint: (
-      getEnvValue(env, "ENDPOINT") ??
-      defaults.endpoint ??
-      required(env, "ENDPOINT")
-    ).replace(/^https?:\/\//, ""),
-    accessKeyId:
-      getEnvValueAny(env, ["ACCESS_KEY_ID", "KEY"]) ??
-      sts?.accessKeyId ??
-      required(env, "ACCESS_KEY_ID", ["KEY"]),
-    accessKeySecret:
-      getEnvValueAny(env, ["ACCESS_KEY_SECRET", "SECRET"]) ??
-      sts?.accessKeySecret ??
-      required(env, "ACCESS_KEY_SECRET", ["SECRET"]),
-    projectName:
-      getEnvValueAny(env, ["PROJECT_NAME", "PROJECT"]) ??
-      defaults.projectName ??
-      required(env, "PROJECT_NAME", ["PROJECT"]),
-    logstoreName:
-      getEnvValueAny(env, ["LOGSTORE_NAME", "LOGSTORE"]) ??
-      defaults.logstoreName ??
-      required(env, "LOGSTORE_NAME", ["LOGSTORE"]),
-    securityToken: getEnvValue(env, "SECURITY_TOKEN") ?? sts?.securityToken,
+    accountMode,
+    authEnv: "single",
+    cached: undefined,
   };
 };
 
 export const loadSlsConsoleConfig = (
   env: EnvironmentName,
 ): SlsConsoleEnvConfig => {
-  const cached = loadConsoleAuthCache(env);
+  const { accountMode, authEnv, cached } = loadConsoleAuthForEnv(env);
   const defaults = DEFAULT_CONSOLE_ENV[env] ?? {};
+  const consoleBaseUrl =
+    getConsoleEnvValue(env, "BASE_URL") ??
+    cached?.consoleBaseUrl ??
+    defaults.consoleBaseUrl ??
+    "https://sls.console.aliyun.com";
+  const projectName =
+    getConsoleEnvValue(env, "PROJECT_NAME") ??
+    getConsoleEnvValue(env, "PROJECT") ??
+    requiredConsole(env, "PROJECT_NAME", ["PROJECT"]);
+  const logstoreName =
+    getConsoleEnvValue(env, "LOGSTORE_NAME") ??
+    getConsoleEnvValue(env, "LOGSTORE") ??
+    requiredConsole(env, "LOGSTORE_NAME", ["LOGSTORE"]);
+  const region = getConsoleRegion(env, cached?.referer ?? defaults.referer);
+  const cachedRefererMatchesTarget =
+    cached?.projectName === projectName && cached?.logstoreName === logstoreName;
   return {
     env,
-    consoleBaseUrl:
-      getConsoleEnvValue(env, "BASE_URL") ??
-      cached?.consoleBaseUrl ??
-      defaults.consoleBaseUrl ??
-      "https://sls.console.aliyun.com",
-    projectName:
-      getConsoleEnvValue(env, "PROJECT_NAME") ??
-      getConsoleEnvValue(env, "PROJECT") ??
-      cached?.projectName ??
-      defaults.projectName ??
-      requiredConsole(env, "PROJECT_NAME", ["PROJECT"]),
-    logstoreName:
-      getConsoleEnvValue(env, "LOGSTORE_NAME") ??
-      getConsoleEnvValue(env, "LOGSTORE") ??
-      cached?.logstoreName ??
-      defaults.logstoreName ??
-      requiredConsole(env, "LOGSTORE_NAME", ["LOGSTORE"]),
+    accountMode,
+    authEnv,
+    consoleBaseUrl,
+    projectName,
+    logstoreName,
     cookie:
       getConsoleEnvValue(env, "COOKIE") ??
       cached?.cookie ??
@@ -158,7 +169,11 @@ export const loadSlsConsoleConfig = (
       getConsoleEnvValue(env, "X_CSRF_TOKEN") ??
       cached?.csrfToken ??
       requiredConsole(env, "CSRF_TOKEN", ["X_CSRF_TOKEN"]),
-    referer: getConsoleEnvValue(env, "REFERER") ?? cached?.referer ?? defaults.referer,
+    referer:
+      getConsoleEnvValue(env, "REFERER") ??
+      (cachedRefererMatchesTarget ? cached?.referer : undefined) ??
+      defaults.referer ??
+      buildConsoleReferer({ consoleBaseUrl, projectName, logstoreName, region }),
     userAgent:
       getConsoleEnvValue(env, "USER_AGENT") ??
       cached?.userAgent ??

@@ -1,5 +1,5 @@
 import { loadAliyunApiAuthCache } from "./aliyun-api-auth";
-import type { EnvironmentName, StsCredentialCache } from "./types";
+import type { EnvironmentName, StsCredentialCache } from "../types";
 
 type OpenApiProxyRequest = {
   action: string;

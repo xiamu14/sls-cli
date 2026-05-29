@@ -1,72 +1,78 @@
 # hugo-aiv-logs
 
-Independent Bun/TypeScript tooling for pulling Hugo AIV diagnostic logs from Alibaba Cloud SLS, normalizing noisy remote reports, deduplicating repeated events, and producing a compact analysis package.
+Independent Bun/TypeScript tooling for querying Hugo AIV diagnostic logs from Alibaba Cloud SLS, normalizing noisy remote reports, deduplicating repeated events, and producing a compact analysis package.
 
 ## Setup
 
 ```bash
 bun install
 cp .env.example .env
+cp .env.local.example .env.local
 ```
 
-Fill `.env` with both environments:
+Use two config files:
+
+- `.env`: sensitive or runtime values, such as cookie, CSRF, cache, and LLM keys.
+- `.env.local`: non-sensitive SLS targets, such as account mode, project, logstore, and region.
+
+Current account mode is `single`, meaning alpha and production use the same console
+account/cookie while each environment keeps its own project/logstore target.
 
 ```bash
 SLS_ENVIRONMENTS=alpha,production
 
-SLS_ALPHA_ENDPOINT=cn-hangzhou.log.aliyuncs.com
-SLS_ALPHA_ACCESS_KEY_ID=...
-SLS_ALPHA_ACCESS_KEY_SECRET=...
-SLS_ALPHA_PROJECT_NAME=...
-SLS_ALPHA_LOGSTORE_NAME=...
+SLS_CONSOLE_ALPHA_BASE_URL=https://sls.console.aliyun.com
+SLS_CONSOLE_ALPHA_COOKIE=...
+SLS_CONSOLE_ALPHA_CSRF_TOKEN=...
+SLS_CONSOLE_ALPHA_REFERER=...
 
-SLS_PRODUCTION_ENDPOINT=cn-hangzhou.log.aliyuncs.com
-SLS_PRODUCTION_ACCESS_KEY_ID=...
-SLS_PRODUCTION_ACCESS_KEY_SECRET=...
-SLS_PRODUCTION_PROJECT_NAME=...
-SLS_PRODUCTION_LOGSTORE_NAME=...
+SLS_CONSOLE_PRODUCTION_BASE_URL=https://sls.console.aliyun.com
+SLS_CONSOLE_PRODUCTION_COOKIE=...
+SLS_CONSOLE_PRODUCTION_CSRF_TOKEN=...
+SLS_CONSOLE_PRODUCTION_REFERER=...
 ```
 
-Optional OpenAI-compatible analysis:
+`.env.local` should contain:
 
 ```bash
-LLM_API_KEY=...
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4.1-mini
+SLS_ACCOUNT_MODE=single
+
+SLS_ALPHA_PROJECT_NAME=k8s-log-cb1a1487044024414acfac80f0d375bc9
+SLS_ALPHA_LOGSTORE_NAME=hugo-alpha-api
+SLS_ALPHA_REGION=cn-shenzhen
+
+SLS_PRODUCTION_PROJECT_NAME=k8s-log-c7c49b76851914521a874b49399a75ca1
+SLS_PRODUCTION_LOGSTORE_NAME=hugo-api
+SLS_PRODUCTION_REGION=cn-shenzhen
 ```
 
-If `LLM_API_KEY` is omitted, the tool still writes a deterministic local summary.
+Account modes:
+
+- `single`: one console cookie shared by alpha and production. Cookie cache is stored as `.cache/console-auth/single.json`.
+- `environment`: alpha and production use separate console cookies. Cookie cache is stored as `.cache/console-auth/<env>.json`.
+
+Analysis is local and Codex-oriented. The tool does not call an LLM API; it writes
+`summary.md` plus `conclusion.md`, and Codex can then read `logs.json` and
+`summary.md` to refine the conclusion with deeper code reasoning.
 
 ## Commands
 
-Pull with official SLS SDK:
+Query and analyze with Aliyun console API cookies:
 
 ```bash
-bun run pull -- --provider sdk --env alpha,production --from "2h ago" --to now
-```
-
-Pull with Aliyun console API cookies:
-
-```bash
-bun run pull -- --provider console --env production --from "2h ago" --to now
+bun run query -- --env production --from "2h ago" --to now
 ```
 
 Fetch more pages:
 
 ```bash
-bun run pull -- --from "2h ago" --to now --line 100 --max-pages 50
+bun run query -- --from "2h ago" --to now --line 100 --max-pages 50
 ```
 
-Pull, filter, cluster, and analyze:
+Query multiple environments:
 
 ```bash
-bun run run -- --provider console --env production --from "2026-05-28 00:00:00+08:00" --to now
-```
-
-Analyze an existing pull:
-
-```bash
-bun run analyze -- --input artifacts/<window>/analysis-input.json
+bun run query -- --env alpha,production --from "2026-05-28 00:00:00+08:00" --to now
 ```
 
 ## Time Arguments
@@ -81,14 +87,28 @@ bun run analyze -- --input artifacts/<window>/analysis-input.json
 
 ## Outputs
 
-Each run writes to `artifacts/<from>_<to>/`:
+Each query writes to a readable artifact directory:
 
-- `<env>.raw.jsonl` raw SLS records per environment
-- `raw-by-env.json`
-- `normalized.json`
-- `clusters.json`
-- `analysis-input.json`
-- `summary.md`
+```txt
+artifacts/<local-run-time>/
+```
+
+Example:
+
+```txt
+artifacts/2026-05-29_13:05:42/
+```
+
+The query window, environments, query text, provider, and counts are summarized in
+`summary.md`.
+
+The directory contains:
+
+- `logs.json` readable, parsed logs with diagnostics payload chunks reassembled by trace id
+- `summary.md` query summary generated after analysis
+- `conclusion.md` Codex-oriented statistics, classification, evidence, and code context hints based on `logs.json` + `summary.md`
+
+Temporary query/analysis files are not kept in the artifact directory.
 
 ## Query
 
@@ -103,33 +123,74 @@ The default query targets current app remote diagnostic groups:
 Override it when needed:
 
 ```bash
-bun run pull -- --provider console --query "'[motionVideoDl]' and ResponseInterceptor not native_generating"
+bun run query -- --query "'[motionVideoDl]' and ResponseInterceptor not native_generating"
 ```
 
-## Console API Provider
+## Console API Query
 
-Use this when AK/SK is unavailable but browser login can access the SLS console.
-Import a fresh browser curl when the cached cookie expires:
+The only supported SLS access path is the same console request family used by the
+browser. SDK, STS, and API Explorer proxy code is kept under `src/sdk-backup/` for
+reference, but normal querying should use console cookies.
+
+### Import Cookie From Browser cURL
+
+1. Open Alibaba Cloud SLS console and run the target search once.
+2. Open browser DevTools Network.
+3. Filter for one of these requests:
+   - `getLogs.json`
+   - `getHistograms.json`
+4. Copy the request as cURL.
+5. Save it to a local text file and import it for the matching environment:
 
 ```bash
-bun run cookie:status -- --env production
-bun run cookie:status -- --env production --probe
-bun run cookie:import -- --env production --curl-file latest-sls-curl.txt
+bun run cookie:import -- --env alpha --curl-file latest-alpha-sls-curl.txt
+bun run cookie:import -- --env production --curl-file latest-production-sls-curl.txt
 ```
 
-Only one curl is needed. It can be any of the SLS console requests that contains:
+Only one cURL is needed per environment. It can be any SLS console request that contains:
 
 - `-b` / `--cookie` or a `cookie:` header
 - `x-csrf-token`
 - `ProjectName` and `LogStoreName` in `--data-raw`
+- usually a `referer` containing `slsRegion=<region>`
 
-The importer extracts cookie, CSRF token, referer, user-agent, project, and logstore into:
+The importer extracts cookie, CSRF token, referer, user-agent, project, and logstore.
+`ProjectName` / `LogStoreName` are treated as non-sensitive target config:
+
+- If `.env.local` has no value for that env, the importer writes values from the cURL.
+- If `.env.local` already has the same values, the importer leaves it unchanged.
+- If `.env.local` has different values, the importer fails so you can confirm whether the cURL is alpha or production.
+
+For example alpha currently uses:
+
+```txt
+ProjectName=k8s-log-cb1a1487044024414acfac80f0d375bc9
+LogStoreName=hugo-alpha-api
+```
+
+The parsed auth is cached here:
 
 ```txt
 .cache/console-auth/<env>.json
 ```
 
-You can still put these values directly in `.env` if preferred:
+In `single` account mode, the shared cookie is cached at:
+
+```txt
+.cache/console-auth/single.json
+```
+
+Check or probe the cache:
+
+```bash
+bun run cookie:status -- --env alpha,production
+bun run cookie:status -- --env alpha --probe
+```
+
+If probe returns `ConsoleNeedLogin` / `needLogin`, copy a fresh cURL from the browser
+and import it again.
+
+You can also put sensitive cookie values directly in `.env` if preferred:
 
 ```bash
 SLS_CONSOLE_PRODUCTION_COOKIE='aliyun_enable_passkey=...; isg=...'
@@ -137,7 +198,28 @@ SLS_CONSOLE_PRODUCTION_CSRF_TOKEN=a2a08ebf
 SLS_CONSOLE_PRODUCTION_REFERER='https://sls.console.aliyun.com/lognext/project/<project>/logsearch/<logstore>?slsRegion=<region>'
 ```
 
-The console provider intentionally does not store cookies in run artifacts. It calls the same request family observed from the console:
+### Query With Cached Cookie
+
+After importing the cookie, query logs with `query`:
+
+```bash
+bun run query -- --env alpha --from "1h ago" --to now --query "'[MotionVideoSkeletonStuck]' and ResponseInterceptor"
+```
+
+Pagination is controlled by `--line` and `--max-pages`:
+
+```bash
+bun run query -- --env alpha --from "1h ago" --to now --line 100 --max-pages 20
+```
+
+`query` automatically writes `summary.md` after fetching and clustering logs. The query responses are cached by query window, env, project, logstore, query, and paging
+options. To force a live request:
+
+```bash
+QUERY_CACHE_PROVIDER=none bun run query -- --env alpha --from "1h ago" --to now
+```
+
+The query path intentionally does not store cookies in run artifacts. It calls the same request family observed from the console:
 
 - `/console/logstoreindex/getLogs.json`
 - `/console/logstoreindex/getHistograms.json`
@@ -146,12 +228,12 @@ The console provider intentionally does not store cookies in run artifacts. It c
 `/console/logs/getLogs.json` is used as the primary log source. The first two responses are saved to `console-meta-by-env.json` for debugging response shape and count issues. By default the primary query appends `| with_pack_meta`; disable that with:
 
 ```bash
-bun run pull -- --provider console --with-pack-meta false
+bun run query -- --with-pack-meta false
 ```
 
-## Query Cache
+## Query Response Cache
 
-Query results are cached before normalization/analysis. Default cache is local file cache:
+SLS responses are cached before normalization/analysis. Default cache is local file cache:
 
 ```bash
 QUERY_CACHE_PROVIDER=file
@@ -161,7 +243,7 @@ QUERY_CACHE_TTL_SECONDS=3600
 Disable cache:
 
 ```bash
-QUERY_CACHE_PROVIDER=none bun run pull -- --provider console --env production --from "2h ago" --to now
+QUERY_CACHE_PROVIDER=none bun run query -- --env production --from "2h ago" --to now
 ```
 
 Use Valkey with Docker:

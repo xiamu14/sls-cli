@@ -2,10 +2,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type { AliyunApiAuthCache, EnvironmentName } from "./types";
+import type { AliyunApiAuthCache, EnvironmentName } from "../types";
 
 const cachePath = (env: EnvironmentName) =>
-  resolve(process.cwd(), ".cache", "aliyun-api-auth", `${env}.json`);
+  resolve(process.cwd(), ".cache", "sdk-auth", `${env}.json`);
 
 const parseHeader = (curl: string, name: string) => {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

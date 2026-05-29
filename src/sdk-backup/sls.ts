@@ -1,6 +1,6 @@
 import Client from "@alicloud/log";
 
-import type { RawSlsRecord, SlsEnvConfig } from "./types";
+import type { RawSlsRecord, SlsEnvConfig } from "../types";
 
 type SlsResponse = RawSlsRecord[] | { logs?: RawSlsRecord[]; count?: number };
 

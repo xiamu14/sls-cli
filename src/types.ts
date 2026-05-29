@@ -12,6 +12,8 @@ export type SlsEnvConfig = {
 
 export type SlsConsoleEnvConfig = {
   env: EnvironmentName;
+  accountMode: "single" | "environment";
+  authEnv: EnvironmentName;
   consoleBaseUrl: string;
   projectName: string;
   logstoreName: string;

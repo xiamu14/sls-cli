@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type { EnvironmentName, StsCredentialCache } from "./types";
+import type { EnvironmentName, StsCredentialCache } from "../types";
 
 const cachePath = (env: EnvironmentName) =>
   resolve(process.cwd(), ".cache", "sts", `${env}.json`);
