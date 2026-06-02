@@ -140,12 +140,19 @@ reference, but normal querying should use console cookies.
    - `getLogs.json`
    - `getHistograms.json`
 4. Copy the request as cURL.
-5. Save it to a local text file and import it for the matching environment:
+5. Save it to `.cookie.<env>` and import it for the matching environment:
 
 ```bash
-bun run cookie:import -- --env alpha --curl-file latest-alpha-sls-curl.txt
-bun run cookie:import -- --env production --curl-file latest-production-sls-curl.txt
+pbpaste > .cookie.production
+bun run cookie:import -- --env production
+
+pbpaste > .cookie.alpha
+bun run cookie:import -- --env alpha
 ```
+
+`cookie:import --env production` reads `.cookie.production` by default, and
+`cookie:import --env alpha` reads `.cookie.alpha`. For one-off imports, you can
+still pass `--curl-file <path>`.
 
 Only one cURL is needed per environment. It can be any SLS console request that contains:
 
@@ -184,11 +191,14 @@ Check or probe the cache:
 
 ```bash
 bun run cookie:status -- --env alpha,production
-bun run cookie:status -- --env alpha --probe
+bun run cookie:status -- --env production
+bun run cookie:status -- --env production --probe false
 ```
 
-If probe returns `ConsoleNeedLogin` / `needLogin`, copy a fresh cURL from the browser
-and import it again.
+`cookie:status` probes the console API by default. Use `--probe false` only when
+you want to inspect cached fields without checking whether the cookie is usable.
+If probe returns `ConsoleNeedLogin` / `needLogin`, copy a fresh cURL from the
+browser and import it again.
 
 You can also put sensitive cookie values directly in `.env` if preferred:
 
@@ -203,7 +213,7 @@ SLS_CONSOLE_PRODUCTION_REFERER='https://sls.console.aliyun.com/lognext/project/<
 After importing the cookie, query logs with `query`:
 
 ```bash
-bun run query -- --env alpha --from "1h ago" --to now --query "'[MotionVideoSkeletonStuck]' and ResponseInterceptor"
+bun run query -- --env production --from "1h ago" --to now --query "'[MotionVideoSkeletonStuck]' and ResponseInterceptor"
 ```
 
 Pagination is controlled by `--line` and `--max-pages`:
@@ -217,6 +227,7 @@ options. To force a live request:
 
 ```bash
 QUERY_CACHE_PROVIDER=none bun run query -- --env alpha --from "1h ago" --to now
+bun run query -- --env production --from "1h ago" --to now --cache false
 ```
 
 The query path intentionally does not store cookies in run artifacts. It calls the same request family observed from the console:

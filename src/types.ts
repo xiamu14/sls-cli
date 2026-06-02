@@ -116,6 +116,7 @@ export type AnalysisInput = {
     from: string;
     to: string;
   };
+  envs: EnvironmentName[];
   query: string;
   provider?: string;
   rawCount: number;

@@ -90,17 +90,23 @@ const getOutputDir = () =>
     argString(args, "out") ?? join("artifacts", toFileStamp(new Date())),
   );
 
-const readCurlInput = async () => {
+const readCurlInput = async (env: string) => {
   const curlValue = argString(args, "curl");
   if (curlValue) return curlValue;
-  const curlFile = argString(args, "curl-file");
-  if (curlFile) return await readFile(resolve(process.cwd(), curlFile), "utf8");
-  throw new Error("Missing --curl or --curl-file");
+  const curlFile = argString(args, "curl-file") ?? `.cookie.${env}`;
+  try {
+    return await readFile(resolve(process.cwd(), curlFile), "utf8");
+  } catch (error) {
+    throw new Error(
+      `Missing cURL file for ${env}: ${curlFile}. Save the browser cURL to .cookie.${env} or pass --curl-file.`,
+      { cause: error },
+    );
+  }
 };
 
 const importCookie = async () => {
   const env = argString(args, "env") ?? "production";
-  const curl = await readCurlInput();
+  const curl = await readCurlInput(env);
   const auth = parseConsoleCurl(env, curl);
   const envLocal = syncConsoleCurlToEnvLocal({ env, auth });
   const accountMode = getConsoleAccountMode();
@@ -118,9 +124,10 @@ const importCookie = async () => {
 
 const cookieStatus = async () => {
   const envs = parseEnvList(argString(args, "env"));
-  const probe = argBoolean(args, "probe", false);
+  const probe = argBoolean(args, "probe", true);
   for (const env of envs) {
     const status = getConsoleAuthCacheStatus(env);
+    let probeStatus: unknown = { skipped: !probe };
     let effective: unknown;
     try {
       const config = loadSlsConsoleConfig(env);
@@ -133,17 +140,19 @@ const cookieStatus = async () => {
         hasCsrfToken: Boolean(config.csrfToken),
         referer: config.referer,
       };
+      if (probe) {
+        await probeSlsConsoleAuth(config);
+        probeStatus = { usable: true };
+      }
     } catch (error) {
-      effective = {
-        error: error instanceof Error ? error.message : String(error),
-      };
+      const message = error instanceof Error ? error.message : String(error);
+      if (effective) probeStatus = { usable: false, error: message };
+      else {
+        effective = { error: message };
+        probeStatus = { usable: false, error: message };
+      }
     }
-    console.log(JSON.stringify({ ...status, effective }, null, 2));
-    if (probe) {
-      const config = loadSlsConsoleConfig(env);
-      await probeSlsConsoleAuth(config);
-      console.log(`[cookie] ${env} probe ok`);
-    }
+    console.log(JSON.stringify({ ...status, effective, probe: probeStatus }, null, 2));
   }
 };
 
@@ -157,10 +166,12 @@ const queryLogs = async () => {
   const maxPages = argNumber(args, "max-pages", 20);
   const reverse = args.reverse === true || argString(args, "reverse") === "true";
   const withPackMeta = argBoolean(args, "with-pack-meta", true);
+  const useCache = argBoolean(args, "cache", true);
   const outputDir = getOutputDir();
   const consoleConfigs = envs.map((env) => loadSlsConsoleConfig(env));
 
   const rawByEnv: Record<string, RawSlsRecord[]> = {};
+  const metaByEnv: Record<string, ConsolePullMeta> = {};
   const normalized: NormalizedLog[] = [];
 
   for (const config of consoleConfigs) {
@@ -181,10 +192,10 @@ const queryLogs = async () => {
       maxPages,
       withPackMeta,
     });
-    const cached = await getQueryCache<{
+    const cached = useCache ? await getQueryCache<{
       logs: RawSlsRecord[];
       meta: ConsolePullMeta;
-    }>(cacheKey);
+    }>(cacheKey) : undefined;
     const result = cached ?? (await pullSlsConsoleLogs({
       config,
       from,
@@ -196,8 +207,9 @@ const queryLogs = async () => {
       withPackMeta,
     }));
     if (cached) console.log(`[cache] hit ${env}`);
-    else await setQueryCache(cacheKey, result);
+    else if (useCache) await setQueryCache(cacheKey, result);
     rawByEnv[env] = result.logs;
+    metaByEnv[env] = result.meta;
     normalized.push(...normalizeLogs(env, result.logs));
     console.log(`[query] ${env}: ${result.logs.length} raw logs`);
   }
@@ -211,6 +223,7 @@ const queryLogs = async () => {
   await mkdir(outputDir, { recursive: true });
   const readableLogs = buildReadableLogs(rawByEnv);
   await writeJson(join(outputDir, "logs.json"), readableLogs);
+  await writeJson(join(outputDir, "console-meta-by-env.json"), metaByEnv);
 
   const clusters = clusterLogs(normalized);
   const analysisInput: AnalysisInput = {
@@ -219,6 +232,7 @@ const queryLogs = async () => {
       from: from.toISOString(),
       to: to.toISOString(),
     },
+    envs,
     query,
     provider: "console",
     rawCount,
@@ -316,7 +330,7 @@ const main = async () => {
 
   console.log(`Usage:
   bun run src/index.ts cookie:status -- --env production --probe
-  bun run src/index.ts cookie:import -- --env production --curl-file latest-curl.txt
+  bun run src/index.ts cookie:import -- --env production
   bun run src/index.ts query -- --env production --from "2h ago" --to now
   bun run src/index.ts classify:skeleton -- --artifact artifacts/motion-video-skeleton-102047-week
   bun run src/index.ts analyze -- --input artifacts/.../analysis-input.json

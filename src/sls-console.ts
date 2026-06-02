@@ -74,11 +74,61 @@ const postForm = async ({
     );
   }
 
+  const authProblem = findConsoleAuthProblem(json);
+  if (authProblem) {
+    throw new Error(`[sls-console] ${endpoint} auth invalid: ${authProblem}`);
+  }
+
   return json;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === "object" && !Array.isArray(value);
+
+const stringifyBrief = (value: unknown) => {
+  if (typeof value === "string") return value.slice(0, 300);
+  try {
+    return JSON.stringify(value).slice(0, 300);
+  } catch {
+    return String(value).slice(0, 300);
+  }
+};
+
+const findConsoleAuthProblem = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    if (/ConsoleNeedLogin|needLogin|login required|not login|请登录|登录/i.test(value)) {
+      return stringifyBrief(value);
+    }
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const problem = findConsoleAuthProblem(item);
+      if (problem) return problem;
+    }
+    return undefined;
+  }
+
+  if (!isRecord(value)) return undefined;
+
+  const code = stringifyBrief(value.code ?? value.Code ?? value.errorCode);
+  const message = stringifyBrief(value.message ?? value.Message ?? value.errorMessage);
+  const action = stringifyBrief(value.action ?? value.Action);
+  const loginFlag = value.needLogin ?? value.NeedLogin ?? value.consoleNeedLogin;
+  if (loginFlag === true || loginFlag === "true") {
+    return [code, message, action].filter(Boolean).join(" | ") || "needLogin=true";
+  }
+  if (/ConsoleNeedLogin|needLogin|login/i.test([code, message, action].join(" "))) {
+    return [code, message, action].filter(Boolean).join(" | ");
+  }
+
+  for (const item of Object.values(value)) {
+    const problem = findConsoleAuthProblem(item);
+    if (problem) return problem;
+  }
+  return undefined;
+};
 
 const looksLikeLog = (value: unknown) => {
   if (!isRecord(value)) return false;
