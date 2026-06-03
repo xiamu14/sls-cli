@@ -75,41 +75,16 @@ Query multiple environments:
 bun run query -- --env alpha,production --from "2026-05-28 00:00:00+08:00" --to now
 ```
 
-## MCP Server
+## Agent Skill
 
-The repo includes a local MCP server for AI Agents. It uses Bun + Hono and does
-not require token authentication.
-
-Start directly on the Bun port:
-
-```bash
-bun run mcp
-```
-
-Start through portless with the stable local domain:
-
-```bash
-bun run mcp:portless
-```
-
-MCP endpoint:
+Agents should use the bundled skill instead of MCP:
 
 ```txt
-http://sls.localhost:1878/mcp
+skills/sls-bun-scripts/
 ```
 
-The portless script uses a project-local `.portless-sls` state directory, so it
-can coexist with another global portless proxy that uses different `--port`,
-`--tls`, or `--tld` settings.
-
-The server exposes these tools:
-
-- `query`: query SLS logs through the cached console cookie, normalize logs, and write artifacts.
-- `analyze`: generate `summary.md` and `conclusion.md` from `analysis-input.json` + `logs.json`.
-- `cookie_status`: inspect cached cookie status and optionally probe whether the cookie is usable.
-
-`query` writes `analysis-input.json` when called through MCP so an Agent can run
-or repeat `analyze` on the same artifact directory.
+The skill guides agents to query SLS through the same Bun scripts documented here:
+`cookie:status`, `cookie:import`, `query`, `analyze`, and `classify:skeleton`.
 
 ## Time Arguments
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SLS Bun Scripts"
+  short_description: "Query SLS logs through project bun scripts"
+  default_prompt: "Use $sls-bun-scripts to query recent production SLS diagnostic logs and summarize the generated artifacts."

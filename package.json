@@ -9,7 +9,6 @@
     "query": "bun run src/index.ts query",
     "classify:skeleton": "bun run src/index.ts classify:skeleton",
     "analyze": "bun run src/index.ts analyze",
-    "mcp": "PORTLESS_STATE_DIR=.portless-sls PORTLESS_PORT=1878 PORTLESS_HTTPS=0 PORTLESS_LAN=0 PORTLESS_TLD=localhost bun x portless run --name sls -- bun run src/mcp.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
