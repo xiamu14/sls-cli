@@ -80,7 +80,7 @@ bun run query -- --env alpha,production --from "2026-05-28 00:00:00+08:00" --to 
 Agents should use the bundled skill instead of MCP:
 
 ```txt
-skills/sls-bun-scripts/
+skills/sls-cli/
 ```
 
 The skill guides agents to query SLS through the same Bun scripts documented here:

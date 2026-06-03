@@ -1,19 +1,32 @@
 ---
 name: sls-cli
-description: Query and analyze Alibaba Cloud SLS diagnostic logs for this repository through the project Bun scripts, not through MCP. Use when Codex needs to inspect production or alpha SLS logs, refresh/import console cookies, check cookie health, generate timestamped artifacts, classify motion skeleton issues, or summarize log evidence from logs.json, summary.md, and conclusion.md.
+description: Query and analyze Alibaba Cloud SLS diagnostic logs through the sls-cli Bun scripts, not through MCP. Use when Codex needs to inspect production or alpha SLS logs from any workspace, locate or switch to the sls-cli repository, refresh/import console cookies, check cookie health, generate timestamped artifacts, classify motion skeleton issues, or summarize log evidence from logs.json, summary.md, and conclusion.md.
 ---
 
-# SLS Cli
+# SLS CLI
 
 ## Overview
 
-Use this skill to operate the repository's SLS tooling through `bun run` scripts. The normal flow is: check cookie health, import a fresh console cURL if needed, query logs, then read the generated artifact files for reasoning.
+Use this skill to operate the SLS tooling through the `sls-cli` repository's `bun run` scripts. The normal flow is: locate the `sls-cli` repository, check cookie health, import a fresh console cURL if needed, query logs, then read the generated artifact files for reasoning.
 
 Do not start or call an MCP server for this workflow.
 
+## Repository Location
+
+Always run SLS commands from the `sls-cli` repository, not from the user's current app workspace unless it is already `sls-cli`.
+
+1. If the current workspace has `package.json` scripts named `cookie:status`, `cookie:import`, and `query`, use that workspace root.
+2. Otherwise use the known local repository:
+
+```bash
+cd /Users/ben/Workspace/Project/sls-cli
+```
+
+3. If that path is unavailable, search nearby project roots for a `package.json` with those scripts before telling the user the SLS CLI cannot be found.
+
 ## Quick Start
 
-Run commands from the repository root.
+Run commands from the `sls-cli` repository root.
 
 ```bash
 bun run cookie:status -- --env production
@@ -57,8 +70,11 @@ bun run cookie:import -- --env production --curl-file path/to/curl.txt
 
 3. Query the requested window. The default query covers the current app remote diagnostic groups. Override `--query` for targeted investigations.
 
+For targeted diagnostic labels, include `and ResponseInterceptor` unless the user explicitly says not to. This filters repeated/noisy logs and is required for `LinkVideoDraftTrace` investigations.
+
 ```bash
 bun run query -- --env production --from "1h ago" --to now
+bun run query -- --env production --from "7d ago" --to now --query "'[LinkVideoDraftTrace]' and ResponseInterceptor"
 bun run query -- --env production --from "1h ago" --to now --query "'[MotionVideoSkeletonStuck]' and ResponseInterceptor"
 ```
 
