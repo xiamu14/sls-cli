@@ -41,6 +41,25 @@ const getOuterLog = (record: RawSlsRecord) => {
   return isRecord(parsed.value) ? parsed.value : undefined;
 };
 
+const getDataItems = (value: unknown) => {
+  if (Array.isArray(value)) return value;
+  if (!isRecord(value)) return [];
+
+  return Object.entries(value)
+    .sort(([keyA], [keyB]) => Number(keyA) - Number(keyB))
+    .map(([, item]) => item);
+};
+
+const getBodyItems = (outer: Record<string, unknown>) => {
+  const reqData = isRecord(outer.reqData) ? outer.reqData : undefined;
+  const body = isRecord(reqData?.body) ? reqData.body : undefined;
+  const reqItems = getDataItems(body?.data);
+  if (reqItems.length > 0) return reqItems;
+
+  const dto = isRecord(outer.dto) ? outer.dto : undefined;
+  return getDataItems(dto?.data);
+};
+
 type Entry = {
   env: EnvironmentName;
   record: RawSlsRecord;
@@ -54,24 +73,40 @@ const collectEntries = (
   rawByEnv: Record<string, RawSlsRecord[]>,
 ) => {
   const entries: Entry[] = [];
+  const seen = new Set<string>();
 
   for (const [env, records] of Object.entries(rawByEnv)) {
-    for (const record of records) {
+    const orderedRecords = records.slice().sort((a, b) => {
+      const outerA = getOuterLog(a);
+      const outerB = getOuterLog(b);
+      return Number(isRecord(outerB?.reqData)) - Number(isRecord(outerA?.reqData));
+    });
+
+    for (const record of orderedRecords) {
       const outer = getOuterLog(record);
       if (!outer) continue;
-      const reqData = isRecord(outer.reqData) ? outer.reqData : undefined;
-      const body = isRecord(reqData?.body) ? reqData.body : undefined;
-      const data = Array.isArray(body?.data) ? body.data : [];
 
-      for (const item of data) {
+      for (const item of getBodyItems(outer)) {
         if (!isRecord(item)) continue;
         const parsed = parseJson(item.message);
+        if (!isRecord(parsed.value)) continue;
+
+        const dedupeKey = JSON.stringify([
+          env,
+          asString(item.group),
+          asString(item.type),
+          asString(item.time),
+          asString(item.message),
+        ]);
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
         entries.push({
           env,
           record,
           outer,
           item,
-          message: isRecord(parsed.value) ? parsed.value : {},
+          message: parsed.value,
           messageParseError: parsed.error,
         });
       }
