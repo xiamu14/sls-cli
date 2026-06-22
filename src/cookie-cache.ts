@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
@@ -67,6 +67,7 @@ export const saveConsoleAuthCache = async (auth: ConsoleAuthCache) => {
   const path = cachePath(auth.env);
   await mkdir(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(auth, null, 2)}\n`, "utf8");
+  chmodSync(path, 0o600);
 };
 
 export const loadConsoleAuthCache = (

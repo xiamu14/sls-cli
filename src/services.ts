@@ -22,6 +22,7 @@ import { createQueryCacheKey, getQueryCache, setQueryCache } from "./query-cache
 import { buildReadableLogs } from "./readable-logs";
 import { probeSlsConsoleAuth, pullSlsConsoleLogs } from "./sls-console";
 import { parseFlexibleDate, toFileStamp } from "./time";
+import { captureConsoleAuthFromDia } from "./dia-cdp";
 import type {
   AnalysisInput,
   ConsolePullMeta,
@@ -54,6 +55,11 @@ export type AnalyzeOptions = {
 export type CookieStatusOptions = {
   env?: string | string[];
   probe?: boolean;
+};
+
+export type AutoCookieOptions = {
+  cdpUrl?: string;
+  timeoutMs?: number;
 };
 
 const toEnvCsv = (env?: string | string[]) =>
@@ -108,6 +114,36 @@ export const importConsoleCookie = async (params: {
     logstoreName: auth.logstoreName,
     hasCsrfToken: Boolean(auth.csrfToken),
     envLocalChanged: envLocal.changed,
+  };
+};
+
+export const autoImportConsoleCookie = async (
+  options: AutoCookieOptions = {},
+) => {
+  const accountMode = getConsoleAccountMode();
+  if (accountMode !== "single") {
+    throw new Error("cookie:auto currently requires SLS_ACCOUNT_MODE=single.");
+  }
+
+  const auth = await captureConsoleAuthFromDia({
+    cdpUrl: options.cdpUrl,
+    timeoutMs: options.timeoutMs,
+    authEnv: "single",
+  });
+  await saveConsoleAuthCache({
+    ...auth,
+    projectName: undefined,
+    logstoreName: undefined,
+  });
+
+  const statuses = await getCookieStatus({
+    env: ["alpha", "production"],
+    probe: true,
+  });
+  return {
+    authEnv: "single",
+    source: auth.source,
+    statuses,
   };
 };
 

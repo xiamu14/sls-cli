@@ -6,6 +6,7 @@
   "scripts": {
     "cookie:status": "bun run src/index.ts cookie:status",
     "cookie:import": "bun run src/index.ts cookie:import",
+    "cookie:auto": "bun run src/index.ts cookie:auto",
     "query": "bun run src/index.ts query",
     "classify:skeleton": "bun run src/index.ts classify:skeleton",
     "analyze": "bun run src/index.ts analyze",

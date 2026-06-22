@@ -135,6 +135,23 @@ const loadConsoleAuthForEnv = (env: EnvironmentName) => {
 export const loadSlsConsoleConfig = (
   env: EnvironmentName,
 ): SlsConsoleEnvConfig => {
+  const target = loadSlsConsoleTarget(env);
+  const { cached } = loadConsoleAuthForEnv(env);
+  return {
+    ...target,
+    cookie:
+      getConsoleEnvValue(env, "COOKIE") ??
+      cached?.cookie ??
+      requiredConsole(env, "COOKIE"),
+    csrfToken:
+      getConsoleEnvValue(env, "CSRF_TOKEN") ??
+      getConsoleEnvValue(env, "X_CSRF_TOKEN") ??
+      cached?.csrfToken ??
+      requiredConsole(env, "CSRF_TOKEN", ["X_CSRF_TOKEN"]),
+  };
+};
+
+const loadSlsConsoleTarget = (env: EnvironmentName) => {
   const { accountMode, authEnv, cached } = loadConsoleAuthForEnv(env);
   const defaults = DEFAULT_CONSOLE_ENV[env] ?? {};
   const consoleBaseUrl =
@@ -160,15 +177,6 @@ export const loadSlsConsoleConfig = (
     consoleBaseUrl,
     projectName,
     logstoreName,
-    cookie:
-      getConsoleEnvValue(env, "COOKIE") ??
-      cached?.cookie ??
-      requiredConsole(env, "COOKIE"),
-    csrfToken:
-      getConsoleEnvValue(env, "CSRF_TOKEN") ??
-      getConsoleEnvValue(env, "X_CSRF_TOKEN") ??
-      cached?.csrfToken ??
-      requiredConsole(env, "CSRF_TOKEN", ["X_CSRF_TOKEN"]),
     referer:
       getConsoleEnvValue(env, "REFERER") ??
       (cachedRefererMatchesTarget ? cached?.referer : undefined) ??

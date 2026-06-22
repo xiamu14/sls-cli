@@ -55,7 +55,21 @@ Use `--probe false` only when a live console probe is unnecessary:
 bun run cookie:status -- --env production --probe false
 ```
 
-2. If status reports `ConsoleNeedLogin`, `needLogin`, or another auth failure, ask the user for a fresh Alibaba Cloud SLS console cURL or import one already saved on disk. The expected files are `.cookie.production` and `.cookie.alpha`.
+2. If status reports `ConsoleNeedLogin`, `needLogin`, or another auth failure,
+prefer automatic import from Dia when Dia is running with CDP on
+`127.0.0.1:9222`:
+
+```bash
+bun run cookie:auto
+```
+
+This opens or refreshes the SLS profile page, captures `getConfigData.json`,
+imports the shared cookie in `single` account mode, and probes both alpha and
+production. It does not start or close Dia.
+
+If Dia CDP is unavailable, ask the user for a fresh Alibaba Cloud SLS console
+cURL or import one already saved on disk. The expected files are
+`.cookie.production` and `.cookie.alpha`.
 
 ```bash
 bun run cookie:import -- --env production
@@ -70,7 +84,7 @@ bun run cookie:import -- --env production --curl-file path/to/curl.txt
 
 3. Query the requested window. The default query covers the current app remote diagnostic groups. Override `--query` for targeted investigations.
 
-For targeted diagnostic labels, include `and ResponseInterceptor` unless the user explicitly says not to. This filters repeated/noisy logs and is required for `LinkVideoDraftTrace` investigations.
+For any targeted diagnostic-label query, always include `and ResponseInterceptor` unless the user explicitly says not to. Do this even when the user only names the label. The same diagnostic event is commonly logged once by `ApplicationController` and once by `ResponseInterceptor`; omitting `ResponseInterceptor` makes counts and samples roughly 2x duplicated/noisy. This filter is also required for `LinkVideoDraftTrace` investigations.
 
 ```bash
 bun run query -- --env production --from "1h ago" --to now

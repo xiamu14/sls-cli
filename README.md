@@ -84,7 +84,8 @@ skills/sls-cli/
 ```
 
 The skill guides agents to query SLS through the same Bun scripts documented here:
-`cookie:status`, `cookie:import`, `query`, `analyze`, and `classify:skeleton`.
+`cookie:auto`, `cookie:status`, `cookie:import`, `query`, `analyze`, and
+`classify:skeleton`.
 
 ## Time Arguments
 
@@ -137,11 +138,32 @@ Override it when needed:
 bun run query -- --query "'[motionVideoDl]' and ResponseInterceptor not native_generating"
 ```
 
+For targeted diagnostic-label queries, include `and ResponseInterceptor` unless you are intentionally comparing raw emitters. Most diagnostic events are emitted by both `ApplicationController` and `ResponseInterceptor`; filtering to `ResponseInterceptor` avoids roughly 2x duplicated/noisy counts.
+
 ## Console API Query
 
 The only supported SLS access path is the same console request family used by the
 browser. SDK, STS, and API Explorer proxy code is kept under `src/sdk-backup/` for
 reference, but normal querying should use console cookies.
+
+### Auto Import From Dia
+
+Start Dia with Chromium remote debugging enabled, then run:
+
+```bash
+bun run cookie:auto
+```
+
+The command connects to `http://127.0.0.1:9222`, reuses an existing SLS profile
+tab or opens `https://sls.console.aliyun.com/lognext/profile`, and captures the
+`getConfigData.json` request. It imports the Cookie and `x-csrf-token` into the
+shared `single` auth cache, then probes both alpha and production.
+
+The command does not start or close Dia. Its optional overrides are:
+
+```bash
+bun run cookie:auto -- --cdp http://127.0.0.1:9333 --timeout 30
+```
 
 ### Import Cookie From Browser cURL
 

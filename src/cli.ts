@@ -1,5 +1,6 @@
 import {
   analyzeLogs,
+  autoImportConsoleCookie,
   classifySkeletonArtifact,
   getCookieStatus,
   importConsoleCookie,
@@ -52,6 +53,31 @@ const command = process.argv[2] ?? "run";
 const args = parseArgs(process.argv.slice(3));
 
 const main = async () => {
+  if (command === "cookie:auto") {
+    const result = await autoImportConsoleCookie({
+      cdpUrl: argString(args, "cdp"),
+      timeoutMs: argNumber(args, "timeout", 15) * 1_000,
+    });
+    console.log(`[cookie] imported auth=${result.authEnv} source=${result.source}`);
+    let failed = false;
+    for (const status of result.statuses) {
+      const probe =
+        typeof status.probe === "object" && status.probe ? status.probe : {};
+      if ("usable" in probe && probe.usable === true) {
+        console.log(`[cookie] ${status.env} probe=ok`);
+      } else {
+        failed = true;
+        const error =
+          "error" in probe && typeof probe.error === "string"
+            ? ` error=${probe.error}`
+            : "";
+        console.error(`[cookie] ${status.env} probe=failed${error}`);
+      }
+    }
+    if (failed) throw new Error("Imported Dia cookie failed the console probe.");
+    return;
+  }
+
   if (command === "cookie:import") {
     const result = await importConsoleCookie({
       env: argString(args, "env") ?? "production",
@@ -128,6 +154,7 @@ const main = async () => {
   }
 
   console.log(`Usage:
+  bun run src/index.ts cookie:auto
   bun run src/index.ts cookie:status -- --env production --probe
   bun run src/index.ts cookie:import -- --env production
   bun run src/index.ts query -- --env production --from "2h ago" --to now
