@@ -148,21 +148,23 @@ reference, but normal querying should use console cookies.
 
 ### Auto Import From Dia
 
-Start Dia with Chromium remote debugging enabled, then run:
+Run:
 
 ```bash
 bun run cookie:auto
 ```
 
-The command connects to `http://127.0.0.1:9222`, reuses an existing SLS profile
-tab or opens `https://sls.console.aliyun.com/lognext/profile`, and captures the
-`getConfigData.json` request. It imports the Cookie and `x-csrf-token` into the
-shared `single` auth cache, then probes both alpha and production.
+The command connects to `http://127.0.0.1:9222`, starts Dia with
+`--remote-debugging-port=9222` if needed, reuses an existing SLS profile tab or
+opens `https://sls.console.aliyun.com/lognext/profile`, and captures the
+profile request carrying `x-csrf-token`. It imports the Cookie and token into
+the shared `single` auth cache, then probes both alpha and production. If Dia is
+already open without CDP, it restarts Dia automatically.
 
-The command does not start or close Dia. Its optional overrides are:
+Optional overrides:
 
 ```bash
-bun run cookie:auto -- --cdp http://127.0.0.1:9333 --timeout 30
+bun run cookie:auto -- --cdp http://127.0.0.1:9333 --timeout 30 --no-restart
 ```
 
 ### Import Cookie From Browser cURL

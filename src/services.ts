@@ -60,6 +60,8 @@ export type CookieStatusOptions = {
 export type AutoCookieOptions = {
   cdpUrl?: string;
   timeoutMs?: number;
+  autoLaunch?: boolean;
+  restartDia?: boolean;
 };
 
 const toEnvCsv = (env?: string | string[]) =>
@@ -129,6 +131,8 @@ export const autoImportConsoleCookie = async (
     cdpUrl: options.cdpUrl,
     timeoutMs: options.timeoutMs,
     authEnv: "single",
+    autoLaunch: options.autoLaunch,
+    restartDia: options.restartDia,
   });
   await saveConsoleAuthCache({
     ...auth,

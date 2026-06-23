@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildConsoleAuthFromCdpRequest,
+  diaLaunchCommand,
+  isSlsAuthRequest,
+  isProfileTarget,
   selectSlsTarget,
   type CdpRequestSnapshot,
   type CdpTarget,
@@ -75,5 +78,27 @@ describe("Dia CDP cookie import", () => {
     ];
 
     expect(selectSlsTarget(targets, "prod-project")?.id).toBe("profile");
+  });
+
+  test("launches Dia by binary path instead of macOS open", () => {
+    expect(diaLaunchCommand(9222)).toEqual([
+      "/Applications/Dia.app/Contents/MacOS/Dia",
+      "--remote-debugging-port=9222",
+    ]);
+  });
+
+  test("blank target is not treated as profile", () => {
+    expect(isProfileTarget({ id: "1", type: "page", title: "", url: "about:blank" }))
+      .toBe(false);
+  });
+
+  test("captures profile requests that carry csrf", () => {
+    expect(isSlsAuthRequest("https://sls.console.aliyun.com/common/getApi.json"))
+      .toBe(true);
+    expect(
+      isSlsAuthRequest(
+        "https://sls.console.aliyun.com/console/GeneralDataAccessConfig/getGeneralDataAccessConfig.json",
+      ),
+    ).toBe(true);
   });
 });

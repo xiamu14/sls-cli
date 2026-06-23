@@ -56,7 +56,9 @@ const main = async () => {
   if (command === "cookie:auto") {
     const result = await autoImportConsoleCookie({
       cdpUrl: argString(args, "cdp"),
-      timeoutMs: argNumber(args, "timeout", 15) * 1_000,
+      timeoutMs: argNumber(args, "timeout", 30) * 1_000,
+      autoLaunch: !argBoolean(args, "no-launch", false),
+      restartDia: !argBoolean(args, "no-restart", false),
     });
     console.log(`[cookie] imported auth=${result.authEnv} source=${result.source}`);
     let failed = false;

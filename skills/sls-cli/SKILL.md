@@ -56,16 +56,16 @@ bun run cookie:status -- --env production --probe false
 ```
 
 2. If status reports `ConsoleNeedLogin`, `needLogin`, or another auth failure,
-prefer automatic import from Dia when Dia is running with CDP on
-`127.0.0.1:9222`:
+prefer automatic import from Dia:
 
 ```bash
 bun run cookie:auto
 ```
 
-This opens or refreshes the SLS profile page, captures `getConfigData.json`,
+This starts or restarts Dia with `--remote-debugging-port=9222` if needed,
+opens or refreshes the SLS profile page, captures a profile request with CSRF,
 imports the shared cookie in `single` account mode, and probes both alpha and
-production. It does not start or close Dia.
+production.
 
 If Dia CDP is unavailable, ask the user for a fresh Alibaba Cloud SLS console
 cURL or import one already saved on disk. The expected files are

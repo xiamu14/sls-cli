@@ -23,8 +23,16 @@ type CdpMessage = {
 };
 
 const SLS_REQUEST_PATH =
-  /\/console\/(?:getConfigData|logstoreindex\/get(?:Logs|Histograms)|logs\/getLogs)\.json(?:\?|$)/;
+  /\/(?:common\/getApi|console\/(?:getConfigData|GeneralDataAccessConfig\/getGeneralDataAccessConfig|logstoreindex\/get(?:Logs|Histograms)|logs\/getLogs))\.json(?:\?|$)/;
 const SLS_PROFILE_URL = "https://sls.console.aliyun.com/lognext/profile";
+const DIA_BINARY = "/Applications/Dia.app/Contents/MacOS/Dia";
+
+export const diaLaunchCommand = (port: number) => [
+  DIA_BINARY,
+  `--remote-debugging-port=${port}`,
+];
+
+export const isSlsAuthRequest = (url: string) => SLS_REQUEST_PATH.test(url);
 
 const headerValue = (headers: Record<string, unknown>, name: string) => {
   const entry = Object.entries(headers).find(
@@ -80,6 +88,9 @@ export const selectSlsTarget = (
   }
   return candidates[0];
 };
+
+export const isProfileTarget = (target?: CdpTarget) =>
+  Boolean(target?.url.startsWith(SLS_PROFILE_URL));
 
 class CdpClient {
   private socket: WebSocket;
@@ -156,21 +167,67 @@ class CdpClient {
   }
 }
 
-const listTargets = async (cdpUrl: string): Promise<CdpTarget[]> => {
+const listTargetsOnce = async (cdpUrl: string): Promise<CdpTarget[]> => {
   const url = `${cdpUrl.replace(/\/$/, "")}/json/list`;
-  let response: Response;
-  try {
-    response = await fetch(url);
-  } catch (error) {
-    throw new Error(
-      `Could not reach Dia CDP at ${cdpUrl}. Start Dia with --remote-debugging-port=9222.`,
-      { cause: error },
-    );
-  }
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Dia CDP target list failed ${response.status}: ${url}`);
   }
   return (await response.json()) as CdpTarget[];
+};
+
+const cdpPort = (cdpUrl: string) => {
+  const url = new URL(cdpUrl);
+  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") return undefined;
+  return Number(url.port || 80);
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const startDiaCdp = (port: number) => {
+  // ponytail: fire-and-forget; if Dia is already running macOS may ignore the flag.
+  Bun.spawn(diaLaunchCommand(port), {
+    stdout: "ignore",
+    stderr: "ignore",
+    stdin: "ignore",
+  }).unref();
+};
+
+const quitDia = async () => {
+  await Bun.spawn(["osascript", "-e", 'quit app "Dia"'], {
+    stdout: "ignore",
+    stderr: "ignore",
+    stdin: "ignore",
+  }).exited;
+};
+
+const listTargets = async (
+  cdpUrl: string,
+  { autoLaunch, restartDia }: { autoLaunch: boolean; restartDia: boolean },
+): Promise<CdpTarget[]> => {
+  try {
+    return await listTargetsOnce(cdpUrl);
+  } catch (error) {
+    const port = autoLaunch ? cdpPort(cdpUrl) : undefined;
+    if (!port) {
+      throw new Error(`Could not reach Dia CDP at ${cdpUrl}.`, { cause: error });
+    }
+    if (restartDia) {
+      await quitDia();
+      await sleep(1_000);
+    }
+    startDiaCdp(port);
+    for (let index = 0; index < 15; index += 1) {
+      await sleep(300);
+      try {
+        return await listTargetsOnce(cdpUrl);
+      } catch {}
+    }
+    throw new Error(
+      `Could not reach Dia CDP at ${cdpUrl}. Quit Dia and rerun bun run cookie:auto.`,
+      { cause: error },
+    );
+  }
 };
 
 const createProfileTarget = async (cdpUrl: string) => {
@@ -185,19 +242,21 @@ const createProfileTarget = async (cdpUrl: string) => {
 export const captureConsoleAuthFromDia = async ({
   cdpUrl = "http://127.0.0.1:9222",
   preferredProject,
-  timeoutMs = 15_000,
+  timeoutMs = 30_000,
   authEnv = "single",
+  autoLaunch = true,
+  restartDia = true,
 }: {
   cdpUrl?: string;
   preferredProject?: string;
   timeoutMs?: number;
   authEnv?: EnvironmentName;
+  autoLaunch?: boolean;
+  restartDia?: boolean;
 } = {}) => {
-  const targets = await listTargets(cdpUrl);
+  const targets = await listTargets(cdpUrl, { autoLaunch, restartDia });
   const selected = selectSlsTarget(targets, preferredProject);
-  const target = selected?.url.startsWith(SLS_PROFILE_URL)
-    ? selected
-    : await createProfileTarget(cdpUrl);
+  const target = isProfileTarget(selected) ? selected : await createProfileTarget(cdpUrl);
   if (!target?.webSocketDebuggerUrl) {
     throw new Error(
       "Dia opened the SLS profile page but did not expose a debuggable page target.",
@@ -273,7 +332,7 @@ export const captureConsoleAuthFromDia = async ({
 
         if (message.method !== "Network.requestWillBeSent") return;
         const request = message.params?.request;
-        if (!request || typeof request.url !== "string" || !SLS_REQUEST_PATH.test(request.url)) {
+        if (!request || typeof request.url !== "string" || !isSlsAuthRequest(request.url)) {
           return;
         }
         requests.set(requestId, {
@@ -287,7 +346,7 @@ export const captureConsoleAuthFromDia = async ({
       try {
         await client.send("Network.enable", { maxPostDataSize: 1_048_576 });
         await client.send("Page.enable");
-        await client.send("Page.reload", { ignoreCache: true });
+        await client.send("Page.navigate", { url: SLS_PROFILE_URL });
       } catch (error) {
         finish(() => reject(error instanceof Error ? error : new Error(String(error))));
       }
