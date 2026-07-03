@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { buildAnalysisArtifacts } from "./analyze";
 import {
   getConsoleAccountMode,
+  loadCookieBrowserConfig,
   loadSlsConsoleConfig,
   parseEnvList,
   ensureEnvFileHint,
@@ -22,7 +23,7 @@ import { createQueryCacheKey, getQueryCache, setQueryCache } from "./query-cache
 import { buildReadableLogs } from "./readable-logs";
 import { probeSlsConsoleAuth, pullSlsConsoleLogs } from "./sls-console";
 import { parseFlexibleDate, toFileStamp } from "./time";
-import { captureConsoleAuthFromDia } from "./dia-cdp";
+import { captureConsoleAuthFromBrowser } from "./dia-cdp";
 import type {
   AnalysisInput,
   ConsolePullMeta,
@@ -58,10 +59,11 @@ export type CookieStatusOptions = {
 };
 
 export type AutoCookieOptions = {
+  browser?: string;
   cdpUrl?: string;
   timeoutMs?: number;
   autoLaunch?: boolean;
-  restartDia?: boolean;
+  restartBrowser?: boolean;
 };
 
 const toEnvCsv = (env?: string | string[]) =>
@@ -127,12 +129,14 @@ export const autoImportConsoleCookie = async (
     throw new Error("cookie:auto currently requires SLS_ACCOUNT_MODE=single.");
   }
 
-  const auth = await captureConsoleAuthFromDia({
+  const browser = loadCookieBrowserConfig(options.browser);
+  const auth = await captureConsoleAuthFromBrowser({
+    browser,
     cdpUrl: options.cdpUrl,
     timeoutMs: options.timeoutMs,
     authEnv: "single",
     autoLaunch: options.autoLaunch,
-    restartDia: options.restartDia,
+    restartBrowser: options.restartBrowser,
   });
   await saveConsoleAuthCache({
     ...auth,
@@ -147,6 +151,7 @@ export const autoImportConsoleCookie = async (
   return {
     authEnv: "single",
     source: auth.source,
+    browser: browser.name,
     statuses,
   };
 };

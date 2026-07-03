@@ -55,12 +55,15 @@ const args = parseArgs(process.argv.slice(3));
 const main = async () => {
   if (command === "cookie:auto") {
     const result = await autoImportConsoleCookie({
+      browser: argString(args, "browser"),
       cdpUrl: argString(args, "cdp"),
       timeoutMs: argNumber(args, "timeout", 30) * 1_000,
       autoLaunch: !argBoolean(args, "no-launch", false),
-      restartDia: !argBoolean(args, "no-restart", false),
+      restartBrowser: !argBoolean(args, "no-restart", false),
     });
-    console.log(`[cookie] imported auth=${result.authEnv} source=${result.source}`);
+    console.log(
+      `[cookie] imported auth=${result.authEnv} browser=${result.browser} source=${result.source}`,
+    );
     let failed = false;
     for (const status of result.statuses) {
       const probe =
@@ -157,6 +160,7 @@ const main = async () => {
 
   console.log(`Usage:
   bun run src/index.ts cookie:auto
+  bun run src/index.ts cookie:auto -- --browser chrome
   bun run src/index.ts cookie:status -- --env production --probe
   bun run src/index.ts cookie:import -- --env production
   bun run src/index.ts query -- --env production --from "2h ago" --to now

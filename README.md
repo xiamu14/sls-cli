@@ -10,10 +10,11 @@ cp .env.example .env
 cp .env.local.example .env.local
 ```
 
-Use two config files:
+Use config plus env files:
 
+- `src/config.ts`: non-sensitive defaults, such as SLS targets and cookie import browser.
 - `.env`: sensitive or runtime values, such as cookie, CSRF, cache, and LLM keys.
-- `.env.local`: non-sensitive SLS targets, such as account mode, project, logstore, and region.
+- `.env.local`: optional local overrides.
 
 Current account mode is `single`, meaning alpha and production use the same console
 account/cookie while each environment keeps its own project/logstore target.
@@ -32,18 +33,12 @@ SLS_CONSOLE_PRODUCTION_CSRF_TOKEN=...
 SLS_CONSOLE_PRODUCTION_REFERER=...
 ```
 
-`.env.local` should contain:
+The default SLS targets live in `src/config.ts`. `.env.local` only needs local
+overrides:
 
 ```bash
 SLS_ACCOUNT_MODE=single
-
-SLS_ALPHA_PROJECT_NAME=k8s-log-cb1a1487044024414acfac80f0d375bc9
-SLS_ALPHA_LOGSTORE_NAME=hugo-alpha-api
-SLS_ALPHA_REGION=cn-shenzhen
-
-SLS_PRODUCTION_PROJECT_NAME=k8s-log-c7c49b76851914521a874b49399a75ca1
-SLS_PRODUCTION_LOGSTORE_NAME=hugo-api
-SLS_PRODUCTION_REGION=cn-shenzhen
+SLS_COOKIE_BROWSER=dia
 ```
 
 Account modes:
@@ -146,7 +141,7 @@ The only supported SLS access path is the same console request family used by th
 browser. SDK, STS, and API Explorer proxy code is kept under `src/sdk-backup/` for
 reference, but normal querying should use console cookies.
 
-### Auto Import From Dia
+### Auto Import From Browser
 
 Run:
 
@@ -154,16 +149,16 @@ Run:
 bun run cookie:auto
 ```
 
-The command connects to `http://127.0.0.1:9222`, starts Dia with
-`--remote-debugging-port=9222` if needed, reuses an existing SLS profile tab or
-opens `https://sls.console.aliyun.com/lognext/profile`, and captures the
-profile request carrying `x-csrf-token`. It imports the Cookie and token into
-the shared `single` auth cache, then probes both alpha and production. If Dia is
-already open without CDP, it restarts Dia automatically.
+The command uses `SLS_COOKIE_BROWSER` from `src/config.ts` / env. Default is
+Dia; set `SLS_COOKIE_BROWSER=chrome` to import from Chrome. It starts or
+restarts the browser with remote debugging, opens the SLS profile page, captures
+the profile request carrying `x-csrf-token`, imports the Cookie and token into
+the shared `single` auth cache, then probes both alpha and production.
 
 Optional overrides:
 
 ```bash
+bun run cookie:auto -- --browser chrome
 bun run cookie:auto -- --cdp http://127.0.0.1:9333 --timeout 30 --no-restart
 ```
 

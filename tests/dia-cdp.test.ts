@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import { loadCookieBrowserConfig } from "../src/config";
 import {
   buildConsoleAuthFromCdpRequest,
-  diaLaunchCommand,
+  browserLaunchCommand,
   isSlsAuthRequest,
   isProfileTarget,
   selectSlsTarget,
@@ -81,9 +82,22 @@ describe("Dia CDP cookie import", () => {
   });
 
   test("launches Dia by binary path instead of macOS open", () => {
-    expect(diaLaunchCommand(9222)).toEqual([
+    expect(browserLaunchCommand({
+      name: "dia",
+      appName: "Dia",
+      binaryPath: "/Applications/Dia.app/Contents/MacOS/Dia",
+      cdpUrl: "http://127.0.0.1:9222",
+      remoteDebuggingPort: 9222,
+    })).toEqual([
       "/Applications/Dia.app/Contents/MacOS/Dia",
       "--remote-debugging-port=9222",
+    ]);
+  });
+
+  test("launches Chrome on its configured CDP port", () => {
+    expect(browserLaunchCommand(loadCookieBrowserConfig("chrome"))).toEqual([
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "--remote-debugging-port=9223",
     ]);
   });
 

@@ -10,18 +10,54 @@ loadDotenv({ path: resolve(process.cwd(), ".env"), quiet: true });
 loadDotenv({ path: resolve(process.cwd(), ".env.local"), override: true, quiet: true });
 
 const DEFAULT_ENVS = ["alpha", "production"];
+const DEFAULT_COOKIE_BROWSER: CookieBrowserName = "dia";
 
-const DEFAULT_CONSOLE_ENV: Record<
-  string,
-  Partial<
-    Pick<
-      SlsConsoleEnvConfig,
-      "consoleBaseUrl" | "referer"
-    >
-  >
-> = {
+type ConsoleTargetConfig = {
+  consoleBaseUrl: string;
+  projectName: string;
+  logstoreName: string;
+  region: string;
+};
+
+export type CookieBrowserName = "dia" | "chrome";
+
+export type CookieBrowserConfig = {
+  name: CookieBrowserName;
+  appName: string;
+  binaryPath: string;
+  cdpUrl: string;
+  remoteDebuggingPort: number;
+};
+
+const DEFAULT_CONSOLE_TARGETS: Record<string, ConsoleTargetConfig> = {
+  alpha: {
+    consoleBaseUrl: "https://sls.console.aliyun.com",
+    projectName: "k8s-log-cb1a1487044024414acfac80f0d375bc9",
+    logstoreName: "hugo-alpha-api",
+    region: "cn-shenzhen",
+  },
   production: {
     consoleBaseUrl: "https://sls.console.aliyun.com",
+    projectName: "k8s-log-c7c49b76851914521a874b49399a75ca1",
+    logstoreName: "hugo-api",
+    region: "cn-shenzhen",
+  },
+};
+
+const COOKIE_BROWSERS: Record<CookieBrowserName, CookieBrowserConfig> = {
+  dia: {
+    name: "dia",
+    appName: "Dia",
+    binaryPath: "/Applications/Dia.app/Contents/MacOS/Dia",
+    cdpUrl: "http://127.0.0.1:9222",
+    remoteDebuggingPort: 9222,
+  },
+  chrome: {
+    name: "chrome",
+    appName: "Google Chrome",
+    binaryPath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    cdpUrl: "http://127.0.0.1:9223",
+    remoteDebuggingPort: 9223,
   },
 };
 
@@ -56,6 +92,15 @@ export const getConsoleAccountMode = (): "single" | "environment" => {
   throw new Error(`Invalid SLS_ACCOUNT_MODE: ${value}. Use single or environment.`);
 };
 
+export const getCookieBrowserName = (value?: string): CookieBrowserName => {
+  const browser = (value ?? get("SLS_COOKIE_BROWSER") ?? DEFAULT_COOKIE_BROWSER).toLowerCase();
+  if (browser === "dia" || browser === "chrome") return browser;
+  throw new Error(`Invalid SLS_COOKIE_BROWSER: ${browser}. Use dia or chrome.`);
+};
+
+export const loadCookieBrowserConfig = (value?: string): CookieBrowserConfig =>
+  COOKIE_BROWSERS[getCookieBrowserName(value)];
+
 const requiredConsole = (env: string, key: string, aliases: string[] = []) => {
   const keys = [key, ...aliases];
   for (const item of keys) {
@@ -89,6 +134,7 @@ const getConsoleRegion = (env: EnvironmentName, cachedReferer?: string) =>
   extractRegionFromReferer(getConsoleEnvValue(env, "REFERER")) ??
   extractRegionFromReferer(cachedReferer) ??
   extractRegionFromEndpoint(getEnvValue(env, "ENDPOINT")) ??
+  DEFAULT_CONSOLE_TARGETS[env]?.region ??
   "cn-shenzhen";
 
 const buildConsoleReferer = ({
@@ -153,21 +199,23 @@ export const loadSlsConsoleConfig = (
 
 const loadSlsConsoleTarget = (env: EnvironmentName) => {
   const { accountMode, authEnv, cached } = loadConsoleAuthForEnv(env);
-  const defaults = DEFAULT_CONSOLE_ENV[env] ?? {};
+  const defaults = DEFAULT_CONSOLE_TARGETS[env];
   const consoleBaseUrl =
     getConsoleEnvValue(env, "BASE_URL") ??
     cached?.consoleBaseUrl ??
-    defaults.consoleBaseUrl ??
+    defaults?.consoleBaseUrl ??
     "https://sls.console.aliyun.com";
   const projectName =
     getConsoleEnvValue(env, "PROJECT_NAME") ??
     getConsoleEnvValue(env, "PROJECT") ??
+    defaults?.projectName ??
     requiredConsole(env, "PROJECT_NAME", ["PROJECT"]);
   const logstoreName =
     getConsoleEnvValue(env, "LOGSTORE_NAME") ??
     getConsoleEnvValue(env, "LOGSTORE") ??
+    defaults?.logstoreName ??
     requiredConsole(env, "LOGSTORE_NAME", ["LOGSTORE"]);
-  const region = getConsoleRegion(env, cached?.referer ?? defaults.referer);
+  const region = getConsoleRegion(env, cached?.referer);
   const cachedRefererMatchesTarget =
     cached?.projectName === projectName && cached?.logstoreName === logstoreName;
   return {
@@ -180,7 +228,6 @@ const loadSlsConsoleTarget = (env: EnvironmentName) => {
     referer:
       getConsoleEnvValue(env, "REFERER") ??
       (cachedRefererMatchesTarget ? cached?.referer : undefined) ??
-      defaults.referer ??
       buildConsoleReferer({ consoleBaseUrl, projectName, logstoreName, region }),
     userAgent:
       getConsoleEnvValue(env, "USER_AGENT") ??

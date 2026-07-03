@@ -33,7 +33,7 @@ export type ConsoleAuthCache = {
   projectName?: string;
   logstoreName?: string;
   importedAt: string;
-  source: "curl" | "manual" | "dia-cdp";
+  source: "curl" | "manual" | "dia-cdp" | "chrome-cdp";
 };
 
 export type AliyunApiAuthCache = {
