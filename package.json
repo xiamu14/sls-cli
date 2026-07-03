@@ -7,6 +7,7 @@
     "cookie:status": "bun run src/index.ts cookie:status",
     "cookie:import": "bun run src/index.ts cookie:import",
     "cookie:auto": "bun run src/index.ts cookie:auto",
+    "skill": "bun scripts/install-skills.mjs",
     "query": "bun run src/index.ts query",
     "classify:skeleton": "bun run src/index.ts classify:skeleton",
     "analyze": "bun run src/index.ts analyze",
@@ -14,6 +15,7 @@
   },
   "dependencies": {
     "@alicloud/log": "^1.2.6",
+    "@clack/prompts": "^1.6.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "hono": "^4.12.23",
