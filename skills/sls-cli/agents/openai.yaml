@@ -1,4 +1,4 @@
 interface:
   display_name: "SLS CLI"
-  short_description: "Query SLS logs through sls-cli bun scripts"
-  default_prompt: "Use $sls-cli to query recent production SLS diagnostic logs and summarize the generated artifacts."
+  short_description: "Query this project's Alibaba Cloud SLS diagnostics"
+  default_prompt: "When explicitly asked, use $sls-cli to query this project's Alibaba Cloud SLS diagnostic logs in the requested environment and summarize the generated artifacts."

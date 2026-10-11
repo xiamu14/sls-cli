@@ -1,6 +1,6 @@
 ---
 name: sls-cli
-description: Query and analyze Alibaba Cloud SLS diagnostic logs through the sls-cli Bun scripts, not through MCP. Use when Codex needs to inspect production or alpha SLS logs from any workspace, locate or switch to the sls-cli repository, refresh/import console cookies, check cookie health, generate timestamped artifacts, classify motion skeleton issues, or summarize log evidence from logs.json, summary.md, and conclusion.md.
+description: Use only when the user explicitly asks to query or analyze this project's Alibaba Cloud SLS diagnostic logs in the production or alpha environment, or to operate this repository's SLS cookie/query tooling. Do not use for generic application logs, local log files, logs from other services or projects, or logging questions that do not involve Alibaba Cloud SLS.
 ---
 
 # SLS CLI
@@ -8,6 +8,8 @@ description: Query and analyze Alibaba Cloud SLS diagnostic logs through the sls
 ## Overview
 
 Use this skill to operate the SLS tooling through the `sls-cli` repository's `bun run` scripts. The normal flow is: locate the `sls-cli` repository, check cookie health, import a fresh console cURL if needed, query logs, then read the generated artifact files for reasoning.
+
+This skill is only for this project's Alibaba Cloud SLS diagnostic logs in production or alpha. Do not use it for unrelated project logs or general logging tasks.
 
 Do not start or call an MCP server for this workflow.
 
